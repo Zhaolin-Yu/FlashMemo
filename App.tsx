@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { CaptureBar } from './components/CaptureBar';
 import { SmartSuggestions } from './components/SmartSuggestions';
 import { ResultsView } from './components/ResultsView';
@@ -30,6 +30,10 @@ const App: React.FC = () => {
     refreshMemories();
   }, []);
 
+  // Memoize processed memories to pass to SmartSuggestions
+  // This ensures suggestions only update when 'processed' items change (e.g. after batch AI), not on quick capture.
+  const processedMemories = useMemo(() => memories.filter(m => m.status === 'processed'), [memories]);
+
   const handleSearch = async (text: string) => {
     if (!text.trim()) {
         handleClearSearch();
@@ -40,7 +44,6 @@ const App: React.FC = () => {
     setIsSearching(true);
     try {
       // Only search processed memories for accurate retrieval
-      const processedMemories = memories.filter(m => m.status !== 'pending');
       const result = await semanticSearch(text, processedMemories);
       setSearchResult(result);
     } catch (error) {
@@ -178,10 +181,10 @@ const App: React.FC = () => {
             />
         ) : (
             <div className="mt-8 animate-fade-in">
-                {/* Only show suggestions if not searching */}
+                {/* Only show suggestions if not searching. Pass PROCESSED memories only. */}
                 {!isSearching && (
                     <SmartSuggestions 
-                        memories={memories} 
+                        memories={processedMemories} 
                         onSelect={handleSearch} 
                     />
                 )}

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { generateId, saveMemory } from '../services/storageService';
 import { Memory } from '../types';
@@ -41,7 +42,8 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, setCustomDate, custo
         // Minimal tags for simulation, keeping keys English for consistency with system
         People: [subjects[Math.floor(Math.random() * subjects.length)]],
         Action: ["random_gen"]
-      }
+      },
+      status: 'processed' // Explicitly processed
     };
     saveMemory(mem);
     onRefresh();
@@ -58,7 +60,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, setCustomDate, custo
           className="w-full bg-slate-700 rounded p-1 border border-slate-600"
           onChange={handleDateChange}
         />
-        {customDate && <p className="mt-1 text-amber-400">生效中: {customDate.toLocaleDateString('zh-CN')}</p>}
+        {customDate && <p className="mt-1 text-amber-400">生效中: {customDate.toLocaleString('zh-CN')}</p>}
       </div>
 
       <button 
