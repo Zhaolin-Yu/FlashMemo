@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { CaptureBar } from './components/CaptureBar';
 import { SmartSuggestions } from './components/SmartSuggestions';
@@ -8,6 +7,158 @@ import { getMemories, clearMemories, updateMemory } from './services/storageServ
 import { semanticSearch, analyzeInput } from './services/geminiService';
 import { Memory, SearchResult } from './types';
 
+// --- Memory Card Component ---
+interface MemoryCardProps {
+  memory: Memory;
+  isPlaying: boolean;
+  onPlay: (e: React.MouseEvent) => void;
+  devMode: boolean;
+}
+
+const MemoryCard: React.FC<MemoryCardProps> = ({ memory, isPlaying, onPlay, devMode }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isPending = memory.status === 'pending';
+  const hasAudio = !!memory.audioData;
+
+  const formatMemoryDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isThisYear = date.getFullYear() === now.getFullYear();
+
+    return date.toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      ...(isThisYear ? {} : { year: 'numeric' })
+    });
+  };
+
+  return (
+    <div 
+      onClick={() => setIsExpanded(!isExpanded)}
+      className={`
+        rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden
+        ${isPending 
+          ? 'border-l-4 border-l-amber-300 border-r-slate-200 border-y-slate-200 bg-amber-50/30 hover:shadow-sm' 
+          : 'border-slate-100 bg-white hover:shadow-md hover:border-brand-100'
+        }
+      `}
+    >
+      <div className="p-4">
+        {/* Header: Date & Status */}
+        <div className="flex justify-between items-center mb-2">
+          <div className="flex items-center gap-2">
+             <span className={`text-[10px] font-bold uppercase tracking-wider ${isPending ? 'text-amber-600' : 'text-slate-400'}`}>
+               {formatMemoryDate(memory.timestamp)}
+             </span>
+             {isPending && (
+               <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] rounded-full font-medium">
+                 未整理
+               </span>
+             )}
+             {devMode && <span className="font-mono text-[9px] text-slate-300">#{memory.id.slice(0,4)}</span>}
+          </div>
+          
+          {/* Processed: Play Icon Indicator (Collapsed View) */}
+          {!isPending && !isExpanded && hasAudio && (
+             <button
+                onClick={onPlay}
+                className={`p-1.5 rounded-full transition-colors z-10 ${isPlaying ? 'bg-brand-100 text-brand-600 animate-pulse' : 'bg-slate-50 text-slate-400 hover:text-brand-500 hover:bg-brand-50'}`}
+                title="播放录音"
+             >
+               {isPlaying ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+               ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+               )}
+             </button>
+          )}
+        </div>
+
+        {/* Content Body */}
+        <div className="space-y-3">
+          
+          {/* PENDING STATE */}
+          {isPending && (
+            <div className="flex items-start justify-between gap-4">
+               <p className={`text-slate-700 text-sm leading-relaxed whitespace-pre-wrap font-medium transition-all ${isExpanded ? '' : 'line-clamp-3'}`}>
+                  {memory.rawContent}
+               </p>
+               {hasAudio && (
+                  <button 
+                    onClick={onPlay}
+                    className={`flex-shrink-0 p-3 rounded-full shadow-sm transition-colors ${isPlaying ? 'bg-brand-100 text-brand-600' : 'bg-white border border-slate-200 text-slate-500 hover:text-brand-600 hover:border-brand-200'}`}
+                  >
+                    {isPlaying ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    )}
+                  </button>
+               )}
+            </div>
+          )}
+
+          {/* PROCESSED STATE */}
+          {!isPending && (
+            <>
+               {/* Main AI Content (Always Visible) */}
+               <div>
+                 {isExpanded && <span className="text-[10px] font-bold text-brand-300 uppercase tracking-widest block mb-1 animate-pulse">AI 整理</span>}
+                 <p className={`text-slate-800 text-sm leading-relaxed ${isExpanded ? '' : 'line-clamp-3'}`}>
+                   {memory.processedContent}
+                 </p>
+               </div>
+
+               {/* Animated Expandable Area: Original Text */}
+               <div 
+                  className={`grid transition-[grid-template-rows] duration-500 ease-out ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+               >
+                 <div className="overflow-hidden">
+                    {/* Inner container adds opacity fade */}
+                    <div className={`pt-3 transition-opacity duration-500 delay-75 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
+                       
+                       {/* Original Content Section */}
+                       <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                          <div className="flex justify-between items-center mb-1">
+                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">原始记录</span>
+                             {hasAudio && (
+                               <span className="text-[10px] text-brand-500 font-medium flex items-center gap-1">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                                 语音
+                               </span>
+                             )}
+                          </div>
+                          <div className="flex items-start justify-between gap-3">
+                              <p className="text-xs text-slate-500 leading-relaxed italic whitespace-pre-wrap">{memory.rawContent}</p>
+                              {hasAudio && (
+                                 <button 
+                                   onClick={onPlay}
+                                   className={`p-1.5 rounded-md border transition-colors flex-shrink-0 ${isPlaying ? 'bg-brand-100 border-brand-200 text-brand-600' : 'bg-white border-slate-200 text-slate-400 hover:text-brand-500'}`}
+                                 >
+                                   {isPlaying ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                                   ) : (
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                   )}
+                                 </button>
+                              )}
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+               </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// --- Main App Component ---
 const App: React.FC = () => {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [query, setQuery] = useState('');
@@ -93,7 +244,8 @@ const App: React.FC = () => {
     }
   };
 
-  const playAudio = (mem: Memory) => {
+  const playAudio = (mem: Memory, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent toggling the card when clicking play
     if (!mem.audioData || !mem.mimeType) return;
     
     if (playingAudioId === mem.id && audioRef.current) {
@@ -111,20 +263,6 @@ const App: React.FC = () => {
     audio.onended = () => setPlayingAudioId(null);
     audio.play();
     setPlayingAudioId(mem.id);
-  };
-
-  const formatMemoryDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isThisYear = date.getFullYear() === now.getFullYear();
-
-    return date.toLocaleString('zh-CN', {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        ...(isThisYear ? {} : { year: 'numeric' })
-    });
   };
 
   const pendingCount = memories.filter(m => m.status === 'pending').length;
@@ -189,7 +327,7 @@ const App: React.FC = () => {
                  </button>
              ) : (
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 </div>
              )}
           </div>
@@ -260,56 +398,13 @@ const App: React.FC = () => {
                     ) : (
                         <div className="space-y-3">
                             {memories.map(m => (
-                                <div key={m.id} className={`bg-white rounded-xl border transition-all hover:shadow-sm ${m.status === 'pending' ? 'border-l-4 border-l-amber-300 border-r-slate-200 border-y-slate-200 bg-amber-50/30' : (devMode ? 'p-4 border-slate-200' : 'p-4 border-slate-100')}`}>
-                                    <div className="p-4 pt-2.5">
-                                        <div className="flex justify-between items-start mb-1.5">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`text-[10px] font-semibold uppercase tracking-wide ${m.status === 'pending' ? 'text-amber-500' : 'text-brand-600'}`}>
-                                                    {formatMemoryDate(m.timestamp)}
-                                                </span>
-                                                {m.status === 'pending' && (
-                                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] rounded-full font-medium">未整理</span>
-                                                )}
-                                            </div>
-                                            {devMode && <span className="font-mono text-[9px] text-slate-300">{m.id.slice(0,5)}</span>}
-                                        </div>
-                                        
-                                        <div className="flex items-start justify-between gap-4">
-                                            <p className={`${m.status === 'pending' ? 'text-slate-600 italic' : 'text-slate-800'} text-sm leading-relaxed flex-grow`}>
-                                                {m.processedContent}
-                                            </p>
-                                            
-                                            {m.audioData && (
-                                                <button 
-                                                    onClick={() => playAudio(m)}
-                                                    className={`flex-shrink-0 p-2 rounded-full transition-colors ${playingAudioId === m.id ? 'bg-brand-100 text-brand-600' : 'bg-slate-100 text-slate-500 hover:bg-brand-50 hover:text-brand-600'}`}
-                                                    title="播放原声"
-                                                >
-                                                    {playingAudioId === m.id ? (
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                                                    ) : (
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                                                    )}
-                                                </button>
-                                            )}
-                                        </div>
-                                        
-                                        {/* Only show Tags in Dev Mode */}
-                                        {devMode && m.tags && (
-                                            <div className="mt-3 pt-3 border-t border-slate-50 flex flex-wrap gap-1">
-                                                {Object.entries(m.tags).map(([k, v]) => {
-                                                    const val = v as string[] | undefined;
-                                                    return val && val.length > 0 ? (
-                                                        <div key={k} className="flex gap-1 items-center bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">{k}:</span>
-                                                            <span className="text-[10px] text-slate-600">{val.join(', ')}</span>
-                                                        </div>
-                                                    ) : null;
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                <MemoryCard 
+                                    key={m.id} 
+                                    memory={m} 
+                                    isPlaying={playingAudioId === m.id}
+                                    onPlay={(e) => playAudio(m, e)}
+                                    devMode={devMode}
+                                />
                             ))}
                         </div>
                     )}
