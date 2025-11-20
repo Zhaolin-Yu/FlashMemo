@@ -38,12 +38,8 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, setCustomDate, custo
       rawContent: content,
       processedContent: content,
       timestamp: randomTime,
-      tags: {
-        // Minimal tags for simulation, keeping keys English for consistency with system
-        People: [subjects[Math.floor(Math.random() * subjects.length)]],
-        Action: ["random_gen"]
-      },
-      status: 'processed' // Explicitly processed
+      tags: {}, // Empty tags as it's pending
+      status: 'pending' // Set to pending
     };
     saveMemory(mem);
     onRefresh();
@@ -67,7 +63,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, setCustomDate, custo
         onClick={generateRandomMemory}
         className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded transition-colors"
       >
-        生成随机记忆
+        生成随机记忆 (待整理)
       </button>
     </div>
   );

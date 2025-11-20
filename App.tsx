@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { CaptureBar } from './components/CaptureBar';
 import { SmartSuggestions } from './components/SmartSuggestions';
 import { ResultsView } from './components/ResultsView';
@@ -14,6 +14,8 @@ const App: React.FC = () => {
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessingPending, setIsProcessingPending] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   
   // Dev Mode State
   const [devMode, setDevMode] = useState(false);
@@ -31,7 +33,6 @@ const App: React.FC = () => {
   }, []);
 
   // Memoize processed memories to pass to SmartSuggestions
-  // This ensures suggestions only update when 'processed' items change (e.g. after batch AI), not on quick capture.
   const processedMemories = useMemo(() => memories.filter(m => m.status === 'processed'), [memories]);
 
   const handleSearch = async (text: string) => {
@@ -43,7 +44,6 @@ const App: React.FC = () => {
     setQuery(text);
     setIsSearching(true);
     try {
-      // Only search processed memories for accurate retrieval
       const result = await semanticSearch(text, processedMemories);
       setSearchResult(result);
     } catch (error) {
@@ -67,7 +67,14 @@ const App: React.FC = () => {
     try {
         for (const mem of pending) {
             const contextDate = new Date(mem.timestamp);
-            const result = await analyzeInput(mem.rawContent, contextDate);
+            let result;
+            
+            // Check if memory has audio data
+            if (mem.audioData && mem.mimeType) {
+               result = await analyzeInput({ mimeType: mem.mimeType, data: mem.audioData }, contextDate);
+            } else {
+               result = await analyzeInput(mem.rawContent, contextDate);
+            }
             
             const updatedMem: Memory = {
                 ...mem,
@@ -84,6 +91,26 @@ const App: React.FC = () => {
     } finally {
         setIsProcessingPending(false);
     }
+  };
+
+  const playAudio = (mem: Memory) => {
+    if (!mem.audioData || !mem.mimeType) return;
+    
+    if (playingAudioId === mem.id && audioRef.current) {
+        audioRef.current.pause();
+        setPlayingAudioId(null);
+        return;
+    }
+
+    if (audioRef.current) {
+        audioRef.current.pause();
+    }
+
+    const audio = new Audio(`data:${mem.mimeType};base64,${mem.audioData}`);
+    audioRef.current = audio;
+    audio.onended = () => setPlayingAudioId(null);
+    audio.play();
+    setPlayingAudioId(mem.id);
   };
 
   const formatMemoryDate = (timestamp: number) => {
@@ -125,7 +152,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="relative group">
-             {/* Back Button (Only visible when searching or viewing results) */}
+             {/* Back Button */}
              {(searchResult || isSearching || query) && (
                 <button 
                     onClick={handleClearSearch}
@@ -138,6 +165,7 @@ const App: React.FC = () => {
 
              <input 
                 type="text"
+                maxLength={160}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch(query)}
@@ -148,7 +176,6 @@ const App: React.FC = () => {
              />
              
              {query ? (
-                // Search Action Button
                  <button 
                     onClick={() => handleSearch(query)}
                     disabled={isSearching}
@@ -161,7 +188,6 @@ const App: React.FC = () => {
                     )}
                  </button>
              ) : (
-                // Microphone Icon (Optional hint) or just placeholder
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                 </div>
@@ -181,7 +207,6 @@ const App: React.FC = () => {
             />
         ) : (
             <div className="mt-8 animate-fade-in">
-                {/* Only show suggestions if not searching. Pass PROCESSED memories only. */}
                 {!isSearching && (
                     <SmartSuggestions 
                         memories={processedMemories} 
@@ -189,7 +214,6 @@ const App: React.FC = () => {
                     />
                 )}
 
-                {/* Recent Memories Stream */}
                 <div className="mt-8">
                     <div className="flex justify-between items-center mb-4 px-1">
                         <h2 className="text-slate-400 font-bold text-xs uppercase tracking-wider">
@@ -250,9 +274,25 @@ const App: React.FC = () => {
                                             {devMode && <span className="font-mono text-[9px] text-slate-300">{m.id.slice(0,5)}</span>}
                                         </div>
                                         
-                                        <p className={`${m.status === 'pending' ? 'text-slate-600 italic' : 'text-slate-800'} text-sm leading-relaxed`}>
-                                            {m.processedContent}
-                                        </p>
+                                        <div className="flex items-start justify-between gap-4">
+                                            <p className={`${m.status === 'pending' ? 'text-slate-600 italic' : 'text-slate-800'} text-sm leading-relaxed flex-grow`}>
+                                                {m.processedContent}
+                                            </p>
+                                            
+                                            {m.audioData && (
+                                                <button 
+                                                    onClick={() => playAudio(m)}
+                                                    className={`flex-shrink-0 p-2 rounded-full transition-colors ${playingAudioId === m.id ? 'bg-brand-100 text-brand-600' : 'bg-slate-100 text-slate-500 hover:bg-brand-50 hover:text-brand-600'}`}
+                                                    title="播放原声"
+                                                >
+                                                    {playingAudioId === m.id ? (
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                                                    ) : (
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
                                         
                                         {/* Only show Tags in Dev Mode */}
                                         {devMode && m.tags && (

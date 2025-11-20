@@ -22,7 +22,9 @@ export interface Memory {
   processedContent: string; // Cleaned up text (e.g. from speech)
   timestamp: number; // Unix timestamp
   tags: MetaTags;
-  status?: 'pending' | 'processed'; // New field
+  status?: 'pending' | 'processed';
+  audioData?: string; // Base64 encoded audio
+  mimeType?: string; // e.g. 'audio/webm'
 }
 
 // Search/Retrieval Types
