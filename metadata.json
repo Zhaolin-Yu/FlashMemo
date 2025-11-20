@@ -1,0 +1,7 @@
+{
+  "name": "FlashMemo",
+  "description": "一款由 AI 驱动的极速闪念捕捉与检索工具。即时捕捉想法，并通过语义聚类找回记忆。",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
